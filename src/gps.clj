@@ -4,6 +4,9 @@
 
 (defrecord Op [action preconds add-set del-set])
 
+(defn appropriate? [goal op]
+  ((:add-set op) goal))
+
 (defn gps-with-state
   "General Problem Solver: achieve all goals using ops"
   [initial-state goals ops]
@@ -13,33 +16,31 @@
                 (println "Executing " (:action op))
                 (swap! state set/difference (:del-set op))
                 (swap! state set/union (:add-set op))))
-            (appropriate? [goal op]
-              ((:add-set op) goal))
             (achieve [goal]
               (or (@state goal)
                   (some apply-op
                         (filter (partial appropriate? goal)
                                 ops))))]
-      (if (every? achieve goals) :solved false))))
+      (if (every? achieve goals) :solved))))
 
 (defn gps-functional
   "General Problem Solver: achieve all goals using ops"
   [initial-state goals ops]
   (letfn [(apply-op [state op]
-            (when-let [new-state (reduce achieve state (:preconds op))]
+            (when-let [new-state (achieve-all state (:preconds op))]
               (println "Executing " (:action op))
               (-> new-state
                   (set/difference (:del-set op))
                   (set/union (:add-set op)))))
-          (appropriate? [goal op]
-            (contains? (:add-set op) goal))
           (achieve [state goal]
             (if (contains? state goal)
                 state
-                (->> ops
-                     (filter #(appropriate? goal %))
-                     (some #(apply-op state %)))))]
-    (if (reduce achieve initial-state goals) :solved)))
+                (some #(and (appropriate? goal %)
+                            (apply-op state %))
+                      ops)))
+          (achieve-all [state goals]
+            (reduce achieve state goals))]
+    (if (achieve-all initial-state goals) :solved)))
 
 ;;; Test
 
