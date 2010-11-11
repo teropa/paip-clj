@@ -1,11 +1,12 @@
 (ns gps
   (:use [clojure.set :as set])
-  (:use [clojure.test]))
+  (:use clojure.test))
 
 (defrecord Op [action preconds add-set del-set])
 
-(defn gps [initial-state goals ops]
+(defn gps-with-state
   "General Problem Solver: achieve all goals using ops"
+  [initial-state goals ops]
   (let [state (atom initial-state)]
     (letfn [(apply-op [op]
               (when (every? achieve (:preconds op))
@@ -19,12 +20,30 @@
                   (some apply-op
                         (filter (partial appropriate? goal)
                                 ops))))]
-      (if (every? achieve goals) :solved))))
+      (if (every? achieve goals) :solved false))))
 
+(defn gps-functional
+  "General Problem Solver: achieve all goals using ops"
+  [initial-state goals ops]
+  (letfn [(apply-op [state op]
+            (when-let [new-state (reduce achieve state (:preconds op))]
+              (println "Executing " (:action op))
+              (-> new-state
+                  (set/difference (:del-set op))
+                  (set/union (:add-set op)))))
+          (appropriate? [goal op]
+            (contains? (:add-set op) goal))
+          (achieve [state goal]
+            (if (contains? state goal)
+                state
+                (->> ops
+                     (filter #(appropriate? goal %))
+                     (some #(apply-op state %)))))]
+    (if (reduce achieve initial-state goals) :solved)))
 
 ;;; Test
 
-(def *school-ops*
+(def school-ops
   [(Op. :drive-son-to-school
      #{:son-at-home :car-works}
      #{:son-at-school}
@@ -50,27 +69,20 @@
      #{:shop-has-money}
      #{:have-money})])
 
-(is
-  (= :solved
-     (gps
-       #{:son-at-home :car-needs-battery :have-money :have-phone-book}
-       #{:son-at-school}
-       *school-ops*)))
 
-(is
-  (nil?
-    (gps
-      #{:son-at-home :car-needs-battery :have-money}
-      #{:son-at-school}
-      *school-ops*)))
+(let [initial-state #{:son-at-home :car-needs-battery :have-money :have-phone-book}
+      goals #{:son-at-school}]
+  (is (= :solved (gps-with-state initial-state goals school-ops)))
+  (is (= :solved (gps-functional initial-state goals school-ops))))
 
-(is
-  (= :solved
-     (gps
-       #{:son-at-home :car-works}
-       #{:son-at-school}
-       *school-ops*)))
+(let [initial-state #{:son-at-home :car-needs-battery :have-money}
+      goals #{:son-at-school}]
+  (is (not (gps-with-state initial-state goals school-ops)))
+  (is (not (gps-functional initial-state goals school-ops))))
 
 
-
+(let [initial-state #{:son-at-home :car-works}
+      goals #{:son-at-school}]
+  (is (= :solved (gps-with-state initial-state goals school-ops)))
+  (is (= :solved (gps-functional initial-state goals school-ops))))
 
